@@ -21,12 +21,15 @@ const iconMeta = {
 	prison: 'Prison',
 };
 
+const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? (process.env.NODE_ENV === 'production' ? '/urcna_map' : '');
+const assetPath = (path) => `${assetBasePath}${path}`;
+
 const markerIconUrls = {
-	church: '/icons/church.png',
-	'church-plant': '/icons/church-plant.png',
-	foreign: '/icons/foreign.png',
-	home: '/icons/home.png',
-	prison: '/icons/prison.png',
+	church: assetPath('/icons/church.png'),
+	'church-plant': assetPath('/icons/church-plant.png'),
+	foreign: assetPath('/icons/foreign.png'),
+	home: assetPath('/icons/home.png'),
+	prison: assetPath('/icons/prison.png'),
 };
 
 const markerIconSizes = {
