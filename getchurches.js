@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const {JSDOM} = require('jsdom');
 
 /* helper – convert “26860 Seco Canyon Rd Santa Clarita CA” → [lat,lon]  */

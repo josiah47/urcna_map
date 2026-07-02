@@ -7836,7 +7836,7 @@ const SearchInput = ({ onInteraction, onReset }) => {
 			<div className="map-searchbox">
 				<input
 					type="search"
-					className="input input-bordered input-sm w-full"
+					className="input input-sm w-full"
 					value={query}
 					onChange={(event) => {
 						onInteraction();
@@ -7875,7 +7875,7 @@ const FacetSelect = ({ attribute, label, allLabel, labelForValue, onInteraction 
 		<label className="form-control w-full">
 			<span className="label-text text-xs font-bold uppercase text-base-content/70">{label}</span>
 			<select
-				className="select select-bordered select-sm w-full"
+				className="select select-sm w-full"
 				value={selectedItem?.value ?? 'all'}
 				onChange={(event) => {
 					onInteraction();
@@ -7942,7 +7942,7 @@ const ClassisFacetSelect = ({ onInteraction }) => {
 		<label className="form-control w-full">
 			<span className="label-text text-xs font-bold uppercase text-base-content/70">Classis</span>
 			<select
-				className="select select-bordered select-sm w-full map-classis-select"
+				className="select select-sm w-full map-classis-select"
 				value={selectedItem?.value ?? 'all'}
 				style={selectedItem ? classisSoftStyle(selectedItem.value) : undefined}
 				onChange={(event) => selectClassis(event.target.value)}
@@ -7976,7 +7976,7 @@ const SearchSummary = ({ total }) => {
 	return <p className="text-sm text-base-content/60">{results?.nbHits ?? total} of {total} locations</p>;
 };
 
-const SearchResults = ({ selectedKey, onSelect, onOpenDetails, onHitsChange }) => {
+const SearchResults = ({ selectedKey, onOpenDetails, onHitsChange }) => {
 	const { hits } = useHits();
 	const resultRefs = useRef(new Map());
 
@@ -7996,73 +7996,69 @@ const SearchResults = ({ selectedKey, onSelect, onOpenDetails, onHitsChange }) =
 		selectedResult.focus({ preventScroll: true });
 	}, [selectedKey]);
 
-	return (
-		<div className="map-results" aria-live="polite">
-			{hits.length === 0 ? (
+	if (hits.length === 0) {
+		return (
+			<div className="map-results" aria-live="polite">
 				<div className="map-empty alert">No locations match those filters.</div>
-			) : (
-				hits.map((marker) => {
-					const key = markerKey(marker);
-					const isSelected = key === selectedKey;
+			</div>
+		);
+	}
 
-					const handleSelect = () => onSelect(key);
+	return (
+		<ul className="map-results list" aria-live="polite">
+			{hits.map((marker) => {
+				const key = markerKey(marker);
+				const isSelected = key === selectedKey;
 
-					return (
-						<div
-							key={key}
-							ref={(element) => {
-								if (element) {
-									resultRefs.current.set(key, element);
-								} else {
-									resultRefs.current.delete(key);
-								}
-							}}
-							role="button"
-							tabIndex={0}
-							aria-selected={isSelected}
-							className={`map-result btn btn-ghost ${isSelected ? 'map-result--selected btn-active' : ''}`}
-							onClick={handleSelect}
-							onKeyDown={(event) => {
-								if (event.key === 'Enter' || event.key === ' ') {
-									event.preventDefault();
-									handleSelect();
-								}
-							}}
-						>
+				const handleSelect = () => onOpenDetails(key);
+
+				return (
+					<li
+						key={key}
+						ref={(element) => {
+							if (element) {
+								resultRefs.current.set(key, element);
+							} else {
+								resultRefs.current.delete(key);
+							}
+						}}
+						role="button"
+						tabIndex={0}
+						aria-current={isSelected ? 'true' : undefined}
+						className={`map-result list-row ${isSelected ? 'map-result--selected' : ''}`}
+						onClick={handleSelect}
+						onKeyDown={(event) => {
+							if (event.key === 'Enter' || event.key === ' ') {
+								event.preventDefault();
+								handleSelect();
+							}
+						}}
+					>
+						<span className="map-result__icon-slot" aria-hidden="true">
+							{markerSupportsClassisColor(marker) ? (
+								<span
+									className="map-result__icon map-result__icon--classis"
+									style={{
+										'--marker-color': classisColor(marker.classis),
+										'--marker-icon-url': `url('${markerIconUrls[marker.type]}')`,
+									}}
+								/>
+							) : (
+								<img
+									className="map-result__icon"
+									src={markerIconUrls[marker.type]}
+									alt=""
+								/>
+							)}
+						</span>
+						<span className="map-result__content">
 							<span className="map-result__name">{marker.name}</span>
 							<span className="map-result__location">{marker.location}</span>
-							<span className="map-result__icon-slot">
-								<button
-									type="button"
-									className="map-result__icon-button btn btn-ghost btn-square"
-									aria-label={`Show information for ${marker.name}`}
-									onClick={(event) => {
-										event.stopPropagation();
-										onOpenDetails(key);
-									}}
-								>
-									{markerSupportsClassisColor(marker) ? (
-										<span
-											className="map-result__icon map-result__icon--classis"
-											style={{
-												'--marker-color': classisColor(marker.classis),
-												'--marker-icon-url': `url('${markerIconUrls[marker.type]}')`,
-											}}
-										/>
-									) : (
-										<img
-											className="map-result__icon"
-											src={markerIconUrls[marker.type]}
-											alt=""
-										/>
-									)}
-								</button>
-							</span>
-						</div>
-					);
-				})
-			)}
-		</div>
+						</span>
+					</li>
+				);
+			})}
+		</ul>
 	);
 };
 
@@ -8246,7 +8242,7 @@ const ChurchDetails = ({ marker, activeTab }) => {
 
 const ChurchInfoDock = ({ activeTab, classis, onTabChange }) => (
 	<nav
-		className="btm-nav btm-nav-sm map-info-panel__dock"
+		className="dock dock-sm map-info-panel__dock"
 		style={classis ? { '--classis-color': classisColor(classis) } : undefined}
 		aria-label="Church information sections"
 	>
@@ -8254,12 +8250,12 @@ const ChurchInfoDock = ({ activeTab, classis, onTabChange }) => (
 			<button
 				key={id}
 				type="button"
-				className={activeTab === id ? 'active' : ''}
+				className={activeTab === id ? 'dock-active' : ''}
 				aria-current={activeTab === id ? 'page' : undefined}
 				onClick={() => onTabChange(id)}
 			>
 				<Icon className="map-info-panel__dock-icon" aria-hidden="true" />
-				<span className="btm-nav-label">{label}</span>
+				<span className="dock-label">{label}</span>
 			</button>
 		))}
 	</nav>
@@ -8301,12 +8297,8 @@ const MarkerInfoSummary = ({ marker }) => {
 	);
 };
 
-const MarkerInfoPanel = ({ marker, onClose }) => {
+const MarkerInfoPanel = ({ marker }) => {
 	const [activeTab, setActiveTab] = useState('meeting');
-
-	useEffect(() => {
-		setActiveTab('meeting');
-	}, [marker ? markerKey(marker) : '']);
 
 	if (!marker) return null;
 	const isChurch = marker.type === 'church';
@@ -8759,7 +8751,6 @@ const WorldMap = () => {
 
 					<SearchResults
 						selectedKey={selectedKey}
-						onSelect={selectMarker}
 						onOpenDetails={openMarkerDetails}
 						onHitsChange={handleHitsChange}
 					/>
@@ -8795,7 +8786,7 @@ const WorldMap = () => {
 						<MarkerLayer markers={wrappedMarkers} onClusterSelect={clearSelection} onMarkerSelect={selectMarker} />
 						<MapFocus marker={focusedMarker} />
 					</MapContainer>
-					<MarkerInfoPanel marker={selectedMarker} onClose={clearSelection} />
+					{selectedMarker ? <MarkerInfoPanel key={markerKey(selectedMarker)} marker={selectedMarker} /> : null}
 				</div>
 			</div>
 		</InstantSearch>
