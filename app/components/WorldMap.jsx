@@ -3,12 +3,13 @@ import {
 	Configure,
 	InstantSearch,
 	useClearRefinements,
+	useCurrentRefinements,
 	useHits,
 	useInstantSearch,
 	useRefinementList,
 	useSearchBox,
 } from 'react-instantsearch';
-import { EnvelopeIcon, HomeIcon, InformationCircleIcon, MapPinIcon, PhoneIcon } from '@heroicons/react/24/outline';
+import { AdjustmentsHorizontalIcon, EnvelopeIcon, HomeIcon, InformationCircleIcon, MapPinIcon, PhoneIcon, PhotoIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { MapContainer, TileLayer, Marker, Polygon, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -38,6 +39,39 @@ const markerIconSizes = {
 	foreign: [35, 58],
 	home: [34, 58],
 	prison: [34, 58],
+};
+
+const desktopInitialView = {
+	center: [34, -55],
+	zoom: 3.25,
+	minZoom: 3,
+};
+
+const mobileInitialView = {
+	center: [49, -100],
+	zoom: 2.75,
+	minZoom: 2.25,
+};
+
+const useMediaQuery = (query) => {
+	const getMatches = useCallback(() => (
+		typeof window !== 'undefined' && window.matchMedia(query).matches
+	), [query]);
+	const [matches, setMatches] = useState(getMatches);
+
+	useEffect(() => {
+		if (typeof window === 'undefined') return undefined;
+
+		const mediaQuery = window.matchMedia(query);
+		const updateMatches = () => setMatches(mediaQuery.matches);
+
+		updateMatches();
+		mediaQuery.addEventListener('change', updateMatches);
+
+		return () => mediaQuery.removeEventListener('change', updateMatches);
+	}, [query]);
+
+	return matches;
 };
 
 const icons = Object.fromEntries(
@@ -7825,41 +7859,69 @@ const createLocalSearchClient = (hits) => ({
 	},
 });
 
-const SearchInput = ({ onInteraction, onReset }) => {
+const SearchInput = ({ total, onInteraction, onReset }) => {
 	const { query, refine } = useSearchBox();
+	const { results } = useInstantSearch();
 	const { refine: clearRefinements, canRefine } = useClearRefinements();
 	const canClear = canRefine || query.length > 0;
+	const resultCount = results?.nbHits ?? total;
 
 	return (
-		<label className="form-control w-full">
-			<span className="label-text text-xs font-bold uppercase text-base-content/70">Search</span>
-			<div className="map-searchbox">
-				<input
-					type="search"
-					className="input input-sm w-full"
-					value={query}
-					onChange={(event) => {
-						onInteraction();
-						refine(event.target.value);
+		<label className="map-searchbox input input-sm w-full">
+			<svg className="map-searchbox__icon h-[1em] opacity-50" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
+				<g strokeLinejoin="round" strokeLinecap="round" strokeWidth="2.5" fill="none" stroke="currentColor">
+					<circle cx="11" cy="11" r="8"></circle>
+					<path d="m21 21-4.3-4.3"></path>
+				</g>
+			</svg>
+			<input
+				type="search"
+				className="map-searchbox__field grow"
+				value={query}
+				aria-label="Search locations"
+				onChange={(event) => {
+					onInteraction();
+					refine(event.target.value);
+				}}
+				placeholder="Church, city, classis, minister"
+			/>
+			{canClear ? (
+				<button
+					type="button"
+					className="map-searchbox__clear kbd kbd-sm"
+					aria-label="Clear search and filters"
+					onClick={() => {
+						onReset();
+						refine('');
+						clearRefinements();
 					}}
-					placeholder="Church, city, classis, minister"
-				/>
-				{canClear ? (
-					<button
-						type="button"
-						className="map-searchbox__clear btn btn-ghost btn-circle btn-xs"
-						aria-label="Clear search and filters"
-						onClick={() => {
-							onReset();
-							refine('');
-							clearRefinements();
-						}}
-					>
-						×
-					</button>
-				) : null}
-			</div>
+				>
+					×
+				</button>
+			) : null}
+			<span className="map-searchbox__summary">{resultCount} of {total}</span>
 		</label>
+	);
+};
+
+const SearchPanelToggle = ({ isOpen, hidden, onToggle }) => {
+	const { query } = useSearchBox();
+	const { items } = useCurrentRefinements();
+	const hasActiveSearch = query.trim().length > 0 || items.some((item) => item.refinements.length > 0);
+
+	if (hidden) return null;
+
+	return (
+		<button
+			type="button"
+			className={`map-panel-toggle map-panel-toggle--floating btn btn-sm ${hasActiveSearch ? 'map-panel-toggle--active' : ''}`}
+			aria-expanded={isOpen}
+			aria-controls="map-search-panel"
+			aria-label="Show search"
+			onClick={onToggle}
+		>
+			<AdjustmentsHorizontalIcon className="map-panel-toggle__icon" aria-hidden="true" />
+		</button>
 	);
 };
 
@@ -7873,7 +7935,7 @@ const FacetSelect = ({ attribute, label, allLabel, labelForValue, onInteraction 
 
 	return (
 		<label className="form-control w-full">
-			<span className="label-text text-xs font-bold uppercase text-base-content/70">{label}</span>
+			{label ? <span className="label-text text-xs font-bold uppercase text-base-content/70">{label}</span> : null}
 			<select
 				className="select select-sm w-full"
 				value={selectedItem?.value ?? 'all'}
@@ -7939,8 +8001,7 @@ const ClassisFacetSelect = ({ onInteraction }) => {
 	};
 
 	return (
-		<label className="form-control w-full">
-			<span className="label-text text-xs font-bold uppercase text-base-content/70">Classis</span>
+		<label className="form-control w-full map-classis-select-control">
 			<select
 				className="select select-sm w-full map-classis-select"
 				value={selectedItem?.value ?? 'all'}
@@ -7969,12 +8030,6 @@ const ClassisOutlineToggle = ({ checked, onChange }) => (
 		/>
 	</label>
 );
-
-const SearchSummary = ({ total }) => {
-	const { results } = useInstantSearch();
-
-	return <p className="text-sm text-base-content/60">{results?.nbHits ?? total} of {total} locations</p>;
-};
 
 const SearchResults = ({ selectedKey, onOpenDetails, onHitsChange }) => {
 	const { hits } = useHits();
@@ -8070,6 +8125,16 @@ const MapClickClear = ({ onClear }) => {
 	return null;
 };
 
+const RemoveLeafletAttributionPrefix = () => {
+	const map = useMap();
+
+	useEffect(() => {
+		map.attributionControl.setPrefix(false);
+	}, [map]);
+
+	return null;
+};
+
 const MapFocus = ({ marker }) => {
 	const map = useMap();
 
@@ -8081,6 +8146,20 @@ const MapFocus = ({ marker }) => {
 			duration: 0.45,
 		});
 	}, [map, marker]);
+
+	return null;
+};
+
+const DefaultMapView = ({ center, zoom, enabled }) => {
+	const map = useMap();
+
+	useEffect(() => {
+		if (!enabled || !map) return;
+
+		map.setView(center, zoom, {
+			animate: false,
+		});
+	}, [center, enabled, map, zoom]);
 
 	return null;
 };
@@ -8115,12 +8194,15 @@ const directionsUrl = (marker) => {
 };
 
 const ChurchMeetingDetails = ({ marker }) => (
-	<div className="church-popup__grid">
+	<div className="church-popup__grid church-meeting-details">
 		<section>
-			<h3>Meeting At</h3>
-			{addressLines(marker.meetingAddress).map((line) => (
-				<p key={line}>{line}</p>
-			))}
+			<h3>Meeting Information</h3>
+			{marker.meetingInformation ? <p>{marker.meetingInformation}</p> : null}
+			{marker.meetingDetails ? <p>{marker.meetingDetails}</p> : null}
+			{marker.updated ? <p className="church-popup__updated">Updated {marker.updated}</p> : null}
+		</section>
+
+		<section>
 			<a className="btn btn-xs church-directions-link" href={directionsUrl(marker)} target="_blank" rel="noopener noreferrer">
 				<MapPinIcon className="church-directions-link__icon" aria-hidden="true" />
 				<span>Driving Directions</span>
@@ -8128,10 +8210,10 @@ const ChurchMeetingDetails = ({ marker }) => (
 		</section>
 
 		<section>
-			<h3>Meeting Information</h3>
-			{marker.meetingInformation ? <p>{marker.meetingInformation}</p> : null}
-			{marker.meetingDetails ? <p>{marker.meetingDetails}</p> : null}
-			{marker.updated ? <p className="church-popup__updated">Updated {marker.updated}</p> : null}
+			<h3>Meeting At</h3>
+			{addressLines(marker.meetingAddress).map((line) => (
+				<p key={line}>{line}</p>
+			))}
 		</section>
 	</div>
 );
@@ -8214,13 +8296,14 @@ const ChurchInfoDetails = ({ marker }) => {
 
 	return additionalFields.length > 0 ? (
 		<div className="church-popup__grid">
-			<section className="church-popup__wide">
+			<dl className="church-contact__list church-popup__wide">
 				{additionalFields.map(([label, value]) => (
-					<p key={label}>
-						<strong>{label}:</strong> {value}
-					</p>
+					<div className="church-contact__row" key={label}>
+						<dt>{label}:</dt>
+						<dd>{value}</dd>
+					</div>
 				))}
-			</section>
+			</dl>
 		</div>
 	) : (
 		<div className="map-empty alert">No additional information available.</div>
@@ -8233,20 +8316,81 @@ const churchInfoTabs = [
 	{ id: 'info', label: 'Info', Icon: InformationCircleIcon },
 ];
 
+const defaultInfoTabs = [
+	{ id: 'info', label: 'Info', Icon: InformationCircleIcon },
+];
+
+const hasMarkerPhoto = (marker) => Boolean(marker.image?.trim());
+
+const markerInfoTabs = (marker) => {
+	const tabs = marker.type === 'church' ? [...churchInfoTabs] : [...defaultInfoTabs];
+
+	if (hasMarkerPhoto(marker)) {
+		tabs.push({ id: 'photo', label: 'Photo', Icon: PhotoIcon });
+	}
+
+	return tabs;
+};
+
+const effectiveMarkerTab = (marker, activeTab) => {
+	const tabs = markerInfoTabs(marker);
+	return tabs.some((tab) => tab.id === activeTab) ? activeTab : tabs[0].id;
+};
+
+const MarkerPhotoDetails = ({ marker }) => (
+	<div className="mission-details">
+		<img className="mission-details__image" alt="" src={marker.image} loading="lazy"/>
+	</div>
+);
+
+const DefaultInfoDetails = ({ marker }) => (
+	<div className="church-popup__grid">
+		<dl className="church-contact__list church-popup__wide">
+			<div className="church-contact__row">
+				<dt>Location:</dt>
+				<dd>{marker.location}</dd>
+			</div>
+			{marker.link ? (
+				<div className="church-contact__row">
+					<dt>Website:</dt>
+					<dd><a className="link link-primary" href={marker.link} target="_blank" rel="noopener noreferrer">{marker.link}</a></dd>
+				</div>
+			) : null}
+		</dl>
+	</div>
+);
+
 const ChurchDetails = ({ marker, activeTab }) => {
+	if (activeTab === 'photo') return <MarkerPhotoDetails marker={marker} />;
 	if (activeTab === 'contact') return <ChurchContactDetails marker={marker} />;
 	if (activeTab === 'info') return <ChurchInfoDetails marker={marker} />;
 
 	return <ChurchMeetingDetails marker={marker} />;
 };
 
-const ChurchInfoDock = ({ activeTab, classis, onTabChange }) => (
+const MarkerDetails = ({ marker, activeTab }) => {
+	if (activeTab === 'photo') return <MarkerPhotoDetails marker={marker} />;
+	if (marker.type === 'church') return <ChurchDetails marker={marker} activeTab={activeTab} />;
+
+	return <DefaultInfoDetails marker={marker} />;
+};
+
+const MarkerInfoDock = ({ activeTab, classis, tabs, onClose, onTabChange }) => (
 	<nav
 		className="dock dock-sm map-info-panel__dock"
 		style={classis ? { '--classis-color': classisColor(classis) } : undefined}
-		aria-label="Church information sections"
+		aria-label="Marker information sections"
 	>
-		{churchInfoTabs.map(({ id, label, Icon }) => (
+		<button
+			type="button"
+			className="map-info-panel__dock-close"
+			aria-label="Close marker information"
+			onClick={onClose}
+		>
+			<XMarkIcon className="map-info-panel__dock-icon" aria-hidden="true" />
+			<span className="dock-label">Close</span>
+		</button>
+		{tabs.map(({ id, label, Icon }) => (
 			<button
 				key={id}
 				type="button"
@@ -8259,18 +8403,6 @@ const ChurchInfoDock = ({ activeTab, classis, onTabChange }) => (
 			</button>
 		))}
 	</nav>
-);
-
-const DefaultDetails = ({ marker }) => (
-	<div className="mission-details">
-		{marker.image ? (
-			<img className="mission-details__image" alt="" src={marker.image} loading="lazy"/>
-		) : null}
-		<p>{marker.location}</p>
-		{marker.link ? (
-			<a className="link link-primary" href={marker.link} target="_blank" rel="noopener noreferrer">Learn More</a>
-		) : null}
-	</div>
 );
 
 const MarkerInfoSummary = ({ marker }) => {
@@ -8297,20 +8429,25 @@ const MarkerInfoSummary = ({ marker }) => {
 	);
 };
 
-const MarkerInfoPanel = ({ marker }) => {
-	const [activeTab, setActiveTab] = useState('meeting');
-
+const MarkerInfoPanel = ({ marker, activeTab, onClose, onTabChange }) => {
 	if (!marker) return null;
-	const isChurch = marker.type === 'church';
+	const tabs = markerInfoTabs(marker);
+	const visibleTab = effectiveMarkerTab(marker, activeTab);
 
 	return (
 		<aside className="map-info-panel" aria-label={`${marker.name} information`}>
 			<div className="church-popup card bg-base-200 rounded-none">
 				<MarkerInfoSummary marker={marker} />
 				<div className="map-info-panel__body">
-					{isChurch ? <ChurchDetails marker={marker} activeTab={activeTab} /> : <DefaultDetails marker={marker} />}
+					<MarkerDetails marker={marker} activeTab={visibleTab} />
 				</div>
-				{isChurch ? <ChurchInfoDock activeTab={activeTab} classis={marker.classis} onTabChange={setActiveTab} /> : null}
+				<MarkerInfoDock
+					activeTab={visibleTab}
+					classis={marker.classis}
+					tabs={tabs}
+					onClose={onClose}
+					onTabChange={onTabChange}
+				/>
 			</div>
 		</aside>
 	);
@@ -8462,7 +8599,11 @@ const FitVisibleMarkers = ({ markers, enabled }) => {
 	const lastFitMarkerKey = useRef('');
 
 	useEffect(() => {
-		if (!enabled || !map || markers.length === 0) return;
+		if (!map || markers.length === 0) return;
+		if (!enabled) {
+			lastFitMarkerKey.current = markerKey;
+			return;
+		}
 		if (markerKey === lastFitMarkerKey.current) return;
 
 		lastFitMarkerKey.current = markerKey;
@@ -8667,10 +8808,14 @@ const WorldMap = () => {
 	const allMarkers = useMemo(() => Markers.filter(isDisplayMarker), []);
 	const searchHits = useMemo(() => allMarkers.map(createSearchHit), [allMarkers]);
 	const searchClient = useMemo(() => createLocalSearchClient(searchHits), [searchHits]);
+	const isMobileMap = useMediaQuery('(pointer: coarse), (max-width: 820px)');
+	const initialView = isMobileMap ? mobileInitialView : desktopInitialView;
 	const [filteredMarkers, setFilteredMarkers] = useState(searchHits);
 	const [selectedKey, setSelectedKey] = useState('');
 	const [focusKey, setFocusKey] = useState('');
+	const [activeInfoTab, setActiveInfoTab] = useState('meeting');
 	const [showClassisOutlines, setShowClassisOutlines] = useState(false);
+	const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(false);
 	const clearSelection = useCallback(() => {
 		setSelectedKey('');
 		setFocusKey('');
@@ -8683,10 +8828,12 @@ const WorldMap = () => {
 	const selectMarker = useCallback((key) => {
 		setSelectedKey(key);
 		setFocusKey('');
+		setIsMobilePanelOpen(false);
 	}, []);
 	const openMarkerDetails = useCallback((key) => {
 		setSelectedKey(key);
 		setFocusKey(key);
+		setIsMobilePanelOpen(false);
 	}, []);
 	const handleHitsChange = useCallback((hits) => {
 		setFilteredMarkers(hits);
@@ -8704,6 +8851,10 @@ const WorldMap = () => {
 		return filteredMarkers.map((marker) => ({ lat: marker.position[0], lng: marker.position[1] }));
 	}, [filteredMarkers]);
 
+	const isShowingAllMarkers = filteredMarkers.length === searchHits.length;
+	const shouldFitVisibleMarkers = !selectedMarker && !(isMobileMap && isShowingAllMarkers);
+	const shouldUseDefaultMobileView = isMobileMap && isShowingAllMarkers;
+
 	const wrappedMarkers = useMemo(() => {
 		return filteredMarkers.flatMap((marker) => {
 			return [-360, 0, 360].map((wrapOffset) => ({
@@ -8719,33 +8870,42 @@ const WorldMap = () => {
 	return (
 		<InstantSearch searchClient={searchClient} indexName="urcna_locations" future={{ preserveSharedStateOnUnmount: true }}>
 			<Configure hitsPerPage={500} facets={['type', 'country', 'region', 'classis']} />
-			<div className="map-shell">
-				<aside className="map-sidebar" aria-label="Map search and results">
-					<div className="map-sidebar__header">
-						<h1 className="text-xl font-bold text-base-content">URCNA Map</h1>
-						<SearchSummary total={allMarkers.length} />
-					</div>
-
+			<div className={`map-shell ${isMobilePanelOpen ? 'map-shell--panel-open' : 'map-shell--panel-closed'}`}>
+				<aside id="map-search-panel" className="map-sidebar" aria-label="Map search and results">
 					<div className="map-filters">
-						<SearchInput onInteraction={clearSelection} onReset={resetSearchAndFilters} />
-						<CategoryRefinementList onInteraction={clearSelection} />
-						<div className="map-location-filter-row">
-							<FacetSelect
-								attribute="country"
-								label="Country"
-								allLabel="All countries"
-								onInteraction={clearSelection}
-							/>
-							<FacetSelect
-								attribute="region"
-								label="State / Province"
-								allLabel="All regions"
-								onInteraction={clearSelection}
-							/>
+						<div className="map-search-filter-row">
+							<button
+								type="button"
+								className="map-panel-toggle map-panel-toggle--inline btn btn-sm"
+								aria-expanded={isMobilePanelOpen}
+								aria-controls="map-search-panel"
+								aria-label="Hide search"
+								onClick={() => setIsMobilePanelOpen(false)}
+							>
+								<XMarkIcon className="map-panel-toggle__icon" aria-hidden="true" />
+							</button>
+							<SearchInput total={allMarkers.length} onInteraction={clearSelection} onReset={resetSearchAndFilters} />
 						</div>
-						<div className="map-classis-filter-row">
-							<ClassisFacetSelect onInteraction={clearSelection} />
-							<ClassisOutlineToggle checked={showClassisOutlines} onChange={setShowClassisOutlines} />
+						<div className="map-filter-columns">
+							<div className="map-filter-checkbox-column">
+								<CategoryRefinementList onInteraction={clearSelection} />
+							</div>
+							<div className="map-filter-select-column">
+								<FacetSelect
+									attribute="country"
+									allLabel="All countries"
+									onInteraction={clearSelection}
+								/>
+								<FacetSelect
+									attribute="region"
+									allLabel="States/Provinces"
+									onInteraction={clearSelection}
+								/>
+								<div className="map-classis-filter-row">
+									<ClassisFacetSelect onInteraction={clearSelection} />
+									<ClassisOutlineToggle checked={showClassisOutlines} onChange={setShowClassisOutlines} />
+								</div>
+							</div>
 						</div>
 					</div>
 
@@ -8757,20 +8917,27 @@ const WorldMap = () => {
 				</aside>
 
 				<div className="map-canvas">
+					<SearchPanelToggle
+						isOpen={isMobilePanelOpen}
+						hidden={Boolean(selectedMarker)}
+						onToggle={() => setIsMobilePanelOpen((isOpen) => !isOpen)}
+					/>
 					<MapContainer
-						center={[34, -55]}
-						zoom={3.25}
+						center={initialView.center}
+						zoom={initialView.zoom}
 						style={{ height: '100%', width: '100%' }}
 						zoomControl={false}
 						preferCanvas
 						worldCopyJump
-						minZoom={3}
+						minZoom={initialView.minZoom}
 						zoomSnap={0.25}
 						wheelDebounceTime={60}
 						wheelPxPerZoomLevel={90}
 					>
 						<FitBoundsButton markers={boundsMarkers} />
-						<FitVisibleMarkers markers={boundsMarkers} enabled={!selectedMarker} />
+						<DefaultMapView center={mobileInitialView.center} zoom={mobileInitialView.zoom} enabled={shouldUseDefaultMobileView} />
+						<FitVisibleMarkers markers={boundsMarkers} enabled={shouldFitVisibleMarkers} />
+						<RemoveLeafletAttributionPrefix />
 
 						<TileLayer
 							url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -8786,7 +8953,15 @@ const WorldMap = () => {
 						<MarkerLayer markers={wrappedMarkers} onClusterSelect={clearSelection} onMarkerSelect={selectMarker} />
 						<MapFocus marker={focusedMarker} />
 					</MapContainer>
-					{selectedMarker ? <MarkerInfoPanel key={markerKey(selectedMarker)} marker={selectedMarker} /> : null}
+					{selectedMarker ? (
+						<MarkerInfoPanel
+							key={markerKey(selectedMarker)}
+							marker={selectedMarker}
+							activeTab={activeInfoTab}
+							onClose={clearSelection}
+							onTabChange={setActiveInfoTab}
+						/>
+					) : null}
 				</div>
 			</div>
 		</InstantSearch>
